@@ -1,0 +1,465 @@
+/* Botll — design tokens + app chrome (PDF-aligned: plum sidebar/topbar, magenta accents) */
+
+:root {
+  --color-primary-dark: #1b0f2e;
+  --color-sidebar: #2c1749;
+  --color-topbar: #251243;
+  --color-accent: #e31b8d;
+  --color-accent-hover: #c71478;
+  --color-soft-pink: #fde7f3;
+  --color-border: #e6e1ef;
+  --color-text-main: #1b1530;
+  --color-text-muted: #6b6a7a;
+  --color-bg: #f4f1fa;
+  --color-card: #ffffff;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --shadow-soft: 0 10px 28px rgba(27, 21, 48, 0.08);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body.app-body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text-main);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.app-root {
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Sidebar */
+.app-sidebar {
+  width: 272px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #36215a 0%, var(--color-sidebar) 55%, #1c0f31 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+@media (min-width: 992px) {
+  .app-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+}
+
+.app-sidebar-inner {
+  min-height: 100%;
+}
+
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-accent), #ff6cbb);
+  box-shadow: var(--shadow-soft);
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.86) !important;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.sidebar-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff !important;
+}
+
+.sidebar-link.active {
+  background: rgba(227, 27, 141, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  color: #fff !important;
+}
+
+.tilia-sidebar-trigger {
+  width: 100%;
+  margin-top: auto;
+  padding: 1rem 1rem 1.25rem;
+  background: transparent;
+}
+
+.tilia-card {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-card);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.tilia-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, #a855f7, var(--color-accent));
+}
+
+/* Main column */
+.app-main {
+  background: var(--color-bg);
+}
+
+.app-topbar {
+  background: var(--color-topbar);
+  color: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 1030;
+}
+
+.topbar-search .form-control {
+  border-radius: 0 999px 999px 0 !important;
+  min-height: 38px;
+}
+
+.topbar-search .input-group-text {
+  border-radius: 999px 0 0 999px !important;
+  min-height: 38px;
+}
+
+.topbar-icon {
+  text-decoration: none !important;
+  padding: 0.35rem 0.45rem;
+}
+
+.bg-accent {
+  background: var(--color-accent) !important;
+}
+
+.tilia-dropdown .dropdown-item {
+  font-size: 0.9rem;
+}
+
+.app-content {
+  padding-bottom: 2rem;
+}
+
+.page-title-block h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--color-text-main);
+}
+
+.page-title-block .subtitle {
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+}
+
+.card-surface {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-soft);
+}
+
+.alert-strip {
+  border-radius: var(--radius-card);
+  background: linear-gradient(90deg, rgba(227, 27, 141, 0.12), rgba(255, 255, 255, 0.8));
+  border: 1px solid rgba(227, 27, 141, 0.25);
+}
+
+.stat-card {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  box-shadow: var(--shadow-soft);
+  padding: 1rem 1.1rem;
+  min-height: 104px;
+}
+
+.stat-card .label {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stat-card .value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.stat-card .meta {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.table-modern {
+  font-size: 0.88rem;
+}
+
+.table-modern thead th {
+  color: var(--color-text-muted);
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--color-border) !important;
+  white-space: nowrap;
+}
+
+.table-modern tbody td {
+  vertical-align: middle;
+  border-color: #efeaf6 !important;
+}
+
+.badge-soft {
+  border-radius: var(--radius-pill);
+  padding: 0.25rem 0.6rem;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.btn-accent {
+  --bs-btn-bg: var(--color-accent);
+  --bs-btn-border-color: var(--color-accent);
+  --bs-btn-hover-bg: var(--color-accent-hover);
+  --bs-btn-hover-border-color: var(--color-accent-hover);
+  --bs-btn-color: #fff;
+  --bs-btn-hover-color: #fff;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+  padding: 0.5rem 1.1rem;
+}
+
+.btn-outline-muted {
+  border-radius: 999px;
+  border-color: var(--color-border);
+  color: var(--color-text-main);
+  background: #fff;
+  font-weight: 700;
+}
+
+.filters-panel .form-select,
+.filters-panel .form-control {
+  font-size: 0.85rem;
+}
+
+/* Login page */
+.login-page {
+  min-height: 100vh;
+  background: var(--color-bg);
+}
+
+.login-hero {
+  min-height: 100vh;
+  background: url("../images/login-hero.jpg") center/cover no-repeat,
+    radial-gradient(1200px 600px at 30% 10%, rgba(227, 27, 141, 0.35), transparent),
+    linear-gradient(135deg, #5b2a86, #2c1749);
+  color: #fff;
+  display: flex;
+  align-items: flex-end;
+  padding: 3rem;
+}
+
+.login-hero-fallback {
+  background: radial-gradient(1200px 600px at 30% 10%, rgba(227, 27, 141, 0.35), transparent), linear-gradient(135deg, #5b2a86, #2c1749);
+}
+
+.login-hero h2 {
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.login-panel {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #251243 0%, #1b0f2e 100%);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  padding: 2.5rem 1.5rem;
+}
+
+.login-card {
+  width: min(460px, 100%);
+  margin: 0 auto;
+}
+
+.login-panel .form-control {
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  border: none;
+}
+
+.login-panel .form-label {
+  font-size: 0.86rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.link-soft {
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+}
+
+.link-soft:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+/* Tilia assistant widget */
+.tilia-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 10, 28, 0.35);
+  z-index: 2000;
+  display: none;
+}
+
+.tilia-overlay.show {
+  display: block;
+}
+
+.tilia-panel {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  width: min(420px, calc(100% - 32px));
+  max-height: min(640px, calc(100% - 32px));
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 24px 48px rgba(24, 15, 45, 0.32);
+  overflow: hidden;
+  z-index: 2001;
+  display: none;
+  flex-direction: column;
+}
+
+.tilia-panel.show {
+  display: flex;
+}
+
+.tilia-header {
+  background: linear-gradient(90deg, #251243, #3a1f66);
+  color: #fff;
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tilia-body {
+  padding: 0.75rem;
+  overflow: auto;
+  flex: 1;
+  background: #faf8fd;
+}
+
+.tilia-starters button {
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.65rem;
+  margin: 0.2rem 0.25rem 0 0;
+}
+
+.tilia-input .form-control {
+  border-radius: 999px;
+}
+
+.tilia-send.btn-accent {
+  border-radius: 999px;
+}
+
+.chat-bubble {
+  max-width: 88%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 14px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.chat-bubble.user {
+  background: rgba(227, 27, 141, 0.12);
+  border: 1px solid rgba(227, 27, 141, 0.25);
+  margin-left: auto;
+}
+
+.chat-bubble.bot {
+  background: #fff;
+  border: 1px solid var(--color-border);
+}
+
+.bg-soft-unread {
+  background: rgba(227, 27, 141, 0.06);
+}
+
+.ticket-row {
+  cursor: pointer;
+}
+
+.ticket-row:hover {
+  background: rgba(124, 58, 237, 0.04);
+}
+
+.upload-box {
+  border: 1px dashed rgba(90, 75, 130, 0.45);
+  border-radius: 14px;
+  padding: 1.5rem;
+  text-align: center;
+  background: #faf8fd;
+}
+
+.template-card {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
+  padding: 1rem 1.1rem;
+}
+
+/* Chart.js: fixed canvas box — prevents infinite vertical growth / resize loops */
+.chart-card .chart-container {
+  position: relative;
+  height: 220px;
+  min-height: 220px;
+  max-height: 220px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.chart-card.chart-card--tall .chart-container {
+  height: 260px;
+  min-height: 260px;
+  max-height: 260px;
+}
+
+.chart-card .chart-container > canvas {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100%;
+}
+
+/* Offcanvas mobile */
+@media (min-width: 992px) {
+  .offcanvas-lg {
+    position: sticky;
+    transform: none !important;
+    visibility: visible !important;
+    z-index: auto;
+    border: 0;
+    width: 272px;
+  }
+}
