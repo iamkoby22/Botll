@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 if (!current_user()) {
@@ -12,29 +11,32 @@ if (!current_user()) {
         <div class="d-flex align-items-center gap-2">
             <div class="tilia-avatar" style="width:34px;height:34px;font-size:0.85rem;">T</div>
             <div>
-                <div class="fw-bold" id="tiliaTitle">Tilia</div>
-                <div class="small text-white-50">Platform assistant</div>
+                <div class="fw-bold tilia-brand-name" id="tiliaTitle">Tilia</div>
+        <div class="small text-white-50">SBS platform assistant</div>
             </div>
         </div>
         <button type="button" class="btn btn-sm btn-light" id="tiliaClose" aria-label="Close">&times;</button>
     </div>
     <div class="tilia-body" id="tiliaMessages">
-        <div class="small text-muted mb-2">Ask about Botll navigation, tickets, templates, dashboard metrics, and approvals.</div>
+        <div class="small text-muted mb-2 tilia-intro">Ask Tilia about navigation, requests, Request Logic, approvals, assignments, and dashboards.</div>
+        <?php if (user_is_super_admin()) : ?>
+        <a href="ai_reviews.php?period=weekly" class="btn btn-sm btn-outline-secondary w-100 mb-2"><i class="bi bi-file-earmark-text me-1"></i>Run Weekly Review</a>
+        <?php endif; ?>
         <div class="tilia-starters mb-2" id="tiliaStarters">
-            <button type="button" data-q="How do I create a ticket?">How do I create a ticket?</button>
-            <button type="button" data-q="How do I check my ticket status?">How do I check my ticket status?</button>
-            <button type="button" data-q="What does SLA Breach mean?">What does SLA Breach mean?</button>
-            <button type="button" data-q="How do I approve a ticket that is sent to me for approval?">How do I approve a ticket?</button>
+            <button type="button" data-q="Who are you?">Who are you?</button>
+            <button type="button" data-q="How do I create a request?">How do I create a request?</button>
+            <button type="button" data-q="How do I create a request template?">How do I create a request template?</button>
             <button type="button" data-q="How do approvals work?">How do approvals work?</button>
-            <button type="button" data-q="How do I use ticket templates?">How do I use ticket templates?</button>
+            <button type="button" data-q="What happens when I mention someone?">What happens when I mention someone?</button>
+            <button type="button" data-q="How do I check my ticket status?">How do I check my ticket status?</button>
         </div>
     </div>
     <div class="p-2 border-top bg-white">
         <div class="input-group tilia-input mb-2">
-            <input type="text" class="form-control" id="tiliaInput" placeholder="Ask about this platform..." autocomplete="off" maxlength="2000">
+            <textarea class="form-control" id="tiliaInput" placeholder="Ask Tilia about Botll..." autocomplete="off" maxlength="2000" rows="2"></textarea>
             <button class="btn btn-accent" type="button" id="tiliaSend">Send</button>
         </div>
-        <div class="small text-muted">Tilia cannot access external topics or your private data.</div>
+        <div class="small text-muted">Tilia only answers Botll questions; she cannot access private data or external sites.</div>
     </div>
 </div>
 <?php

@@ -1,12 +1,72 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/init.php';
 require_page('all_tickets');
 
-$scope = tickets_scope_sql('t');
+if (is_post()) {
+    $postAction = (string) ($_POST['action'] ?? '');
+    if ($postAction === 'bulk_archive' || $postAction === 'bulk_complete') {
+        if (!csrf_verify($_POST['_csrf'] ?? null)) {
+            flash_set('danger', 'Invalid session token.');
+            redirect('all_tickets.php');
+        }
+        $ids = $_POST['ticket_ids'] ?? [];
+        if (!is_array($ids)) {
+            $ids = [];
+        }
+        $ids = array_values(array_filter(array_map('intval', $ids), static fn ($id) => $id > 0));
+        if ($ids === []) {
+            flash_set(
+                'danger',
+                $postAction === 'bulk_complete'
+                    ? 'Select at least one ticket to complete.'
+                    : 'Select at least one ticket to archive.'
+            );
+            redirect('all_tickets.php');
+        }
+        if ($postAction === 'bulk_archive') {
+            if (!sbs_can_bulk_archive_user()) {
+                flash_set('danger', 'You are not allowed to bulk archive tickets.');
+                redirect('all_tickets.php');
+            }
+            $result = ticket_bulk_archive($ids, (int) current_user()['id'], 'bulk');
+            flash_set('success', 'Archived ' . $result['ok'] . ' ticket(s).' . ($result['fail'] > 0 ? ' (' . $result['fail'] . ' skipped.)' : ''));
+            redirect('all_tickets.php');
+        }
+        if ($postAction === 'bulk_complete') {
+            if (!sbs_can_bulk_complete_user()) {
+                flash_set('danger', 'You are not allowed to bulk complete tickets.');
+                redirect('all_tickets.php');
+            }
+            $result = ticket_bulk_complete($ids, (int) current_user()['id']);
+            if (($result['error'] ?? '') === 'empty') {
+                flash_set('danger', 'Select at least one ticket to complete.');
+            } elseif (($result['error'] ?? '') === 'ineligible') {
+                flash_set(
+                    'danger',
+                    'Only tickets that are Done/Closed can be completed. One or more selected tickets are not ready for completion.'
+                );
+            } elseif (($result['error'] ?? '') === 'permission') {
+                flash_set('danger', 'You are not allowed to bulk complete tickets.');
+            } elseif (($result['ok'] ?? 0) > 0) {
+                flash_set('success', 'Selected tickets were completed successfully.');
+            } else {
+                flash_set('danger', 'Could not complete selected tickets.');
+            }
+            redirect('all_tickets.php');
+        }
+    }
+}
+
+$scope = tickets_active_scope_sql('t');
 $pdo = db();
+if (function_exists('ticket_apply_archive_thresholds')) {
+    ticket_apply_archive_thresholds(current_user());
+}
+if (function_exists('ticket_apply_sla_status_batch')) {
+    ticket_apply_sla_status_batch();
+}
 
 $q = trim((string) ($_GET['q'] ?? ''));
 $statusId = (int) ($_GET['status_id'] ?? 0);
@@ -14,6 +74,7 @@ $priorityId = (int) ($_GET['priority_id'] ?? 0);
 $categoryId = (int) ($_GET['category_id'] ?? 0);
 $assigneeId = (int) ($_GET['assignee_id'] ?? 0);
 $departmentId = (int) ($_GET['department_id'] ?? 0);
+$orgCode = trim((string) ($_GET['org_code'] ?? ''));
 $sla = trim((string) ($_GET['sla'] ?? ''));
 $dateFrom = trim((string) ($_GET['date_from'] ?? ''));
 $dateTo = trim((string) ($_GET['date_to'] ?? ''));
@@ -51,6 +112,13 @@ if ($assigneeId > 0) {
 if ($departmentId > 0) {
     $wheres[] = 't.department_id = ?';
     $params[] = $departmentId;
+}
+if ($orgCode !== '' && function_exists('sbs_org_code_filter_sql')) {
+    [$orgSql, $orgParams] = sbs_org_code_filter_sql('t', $orgCode);
+    if ($orgSql !== '') {
+        $wheres[] = $orgSql;
+        array_push($params, ...$orgParams);
+    }
 }
 if ($sla === '1') {
     $wheres[] = 't.sla_breach = 1';
@@ -127,6 +195,9 @@ $assignees = $pdo->query('SELECT id, full_name FROM users WHERE status="active" 
 $departments = $pdo->query('SELECT * FROM departments ORDER BY department_name')->fetchAll();
 
 $filtersOpen = $statusId || $priorityId || $categoryId || $assigneeId || $departmentId || $duration || $sla !== '' || $dateFrom || $dateTo;
+$canBulkArchive = function_exists('sbs_can_bulk_archive_user') && sbs_can_bulk_archive_user();
+$canBulkComplete = function_exists('sbs_can_bulk_complete_user') && sbs_can_bulk_complete_user();
+$canBulkSelect = $canBulkArchive || $canBulkComplete;
 
 $pageTitle = 'All Tickets';
 $activeNav = 'all_tickets';
@@ -137,7 +208,7 @@ require __DIR__ . '/includes/shell_begin.php';
 $f = flash_get();
 if ($f) :
     ?>
-    <div class="container-fluid px-3 px-lg-4"><div class="alert alert-<?php echo e($f['type'] === 'success' ? 'success' : 'info'); ?>"><?php echo e($f['message']); ?></div></div>
+    <div class="container-fluid px-3 px-lg-4"><div class="alert alert-<?php echo e($f['type'] === 'success' ? 'success' : ($f['type'] === 'danger' ? 'danger' : 'info')); ?>"><?php echo e($f['message']); ?></div></div>
 <?php endif; ?>
 
 <div class="container-fluid px-3 px-lg-4">
@@ -215,6 +286,10 @@ if ($f) :
                         </select>
                     </div>
                     <div class="col-md-4 col-lg-2">
+                        <label class="form-label small text-muted mb-1">Org Code</label>
+                        <input type="text" class="form-control form-control-sm" name="org_code" value="<?php echo e($orgCode); ?>" placeholder="Org code">
+                    </div>
+                    <div class="col-md-4 col-lg-2">
                         <label class="form-label small text-muted mb-1">SLA breach</label>
                         <select class="form-select form-select-sm" name="sla">
                             <option value="" <?php echo $sla === '' ? 'selected' : ''; ?>>Any</option>
@@ -290,10 +365,23 @@ if ($f) :
         </div>
     </div>
 
+    <?php if ($canBulkSelect && $tickets) : ?>
+    <form method="post" id="bulkActionsForm" class="mb-2 d-flex flex-wrap gap-2 align-items-center">
+        <input type="hidden" name="_csrf" value="<?php echo e(csrf_token()); ?>">
+        <?php if ($canBulkArchive) : ?>
+        <button type="submit" class="btn btn-outline-muted btn-sm" name="action" value="bulk_archive" onclick="return confirm('Archive selected tickets?');">Archive Selected</button>
+        <?php endif; ?>
+        <?php if ($canBulkComplete) : ?>
+        <button type="submit" class="btn btn-success btn-sm" name="action" value="bulk_complete" onclick="return confirm('Complete selected tickets? Only Done/Closed tickets will be processed.');">Complete Selected</button>
+        <?php endif; ?>
+    </form>
+    <?php endif; ?>
+
     <div class="card-surface p-0 overflow-auto">
         <table class="table table-modern table-hover mb-0 align-middle">
             <thead class="table-light">
                 <tr>
+                    <?php if ($canBulkSelect) : ?><th class="text-center" style="width:36px;"><input type="checkbox" id="selectAllTickets" title="Select all"></th><?php endif; ?>
                     <th></th>
                     <th>ID</th>
                     <th>Summary</th>
@@ -326,6 +414,11 @@ if ($f) :
                 }
                 ?>
                 <tr class="ticket-row" data-href="<?php echo e($detail); ?>" role="button" tabindex="0">
+                    <?php if ($canBulkSelect) : ?>
+                    <td class="text-center" onclick="event.stopPropagation();">
+                        <input type="checkbox" class="ticket-select" name="ticket_ids[]" value="<?php echo $tid; ?>" form="bulkActionsForm">
+                    </td>
+                    <?php endif; ?>
                     <td><a class="btn btn-sm btn-accent" href="<?php echo e($detail); ?>">View</a></td>
                     <td class="fw-semibold"><a class="text-decoration-none text-dark" href="<?php echo e($detail); ?>"><?php echo e($t['ticket_number']); ?></a></td>
                     <td><?php echo e(short_text((string) $t['subject'], 56)); ?></td>
@@ -347,7 +440,7 @@ if ($f) :
                 </tr>
             <?php endforeach; ?>
             <?php if (!$tickets) : ?>
-                <tr><td colspan="18" class="text-center text-muted py-5">No tickets match the current filters.</td></tr>
+                <tr><td colspan="<?php echo $canBulkSelect ? 19 : 18; ?>" class="text-center text-muted py-5">No tickets match the current filters.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>
@@ -355,6 +448,14 @@ if ($f) :
 </div>
 
 <script>
+(function () {
+  const all = document.getElementById('selectAllTickets');
+  if (all) {
+    all.addEventListener('change', function () {
+      document.querySelectorAll('.ticket-select').forEach(function (cb) { cb.checked = all.checked; });
+    });
+  }
+})();
 document.querySelectorAll('tr.ticket-row').forEach(function(row){
   row.addEventListener('click', function(e){
     if (e.target.closest('a,button,input,select,textarea')) return;

@@ -1,12 +1,11 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/init.php';
 require_page('reports');
 
 if (isset($_GET['export']) && (string) $_GET['export'] === 'csv') {
-    $scope = tickets_scope_sql('t');
+    $scope = tickets_active_scope_sql('t');
     $pdo = db();
     $df = trim((string) ($_GET['date_from'] ?? ''));
     $dt = trim((string) ($_GET['date_to'] ?? ''));
@@ -68,12 +67,13 @@ if (isset($_GET['export']) && (string) $_GET['export'] === 'csv') {
     exit;
 }
 
-$scope = tickets_scope_sql('t');
+$scope = tickets_active_scope_sql('t');
 $pdo = db();
 
 $df = trim((string) ($_GET['date_from'] ?? ''));
 $dt = trim((string) ($_GET['date_to'] ?? ''));
 $deptId = (int) ($_GET['department_id'] ?? 0);
+$orgCode = trim((string) ($_GET['org_code'] ?? ''));
 $catId = (int) ($_GET['category_id'] ?? 0);
 $priId = (int) ($_GET['priority_id'] ?? 0);
 
@@ -90,6 +90,13 @@ if ($dt !== '') {
 if ($deptId > 0) {
     $w[] = 't.department_id = ?';
     $params[] = $deptId;
+}
+if ($orgCode !== '' && function_exists('sbs_org_code_filter_sql')) {
+    [$orgSql, $orgParams] = sbs_org_code_filter_sql('t', $orgCode);
+    if ($orgSql !== '') {
+        $w[] = $orgSql;
+        array_push($params, ...$orgParams);
+    }
 }
 if ($catId > 0) {
     $w[] = 't.category_id = ?';
@@ -116,8 +123,50 @@ $tot = (int) ($stc->fetch()['c'] ?? 0);
 
 $open = rep_count($pdo, $where, $params, 's.status_name = "Open"', true);
 $completed = rep_count($pdo, $where, $params, 's.status_name = "Completed"', true);
+$closedDone = rep_count($pdo, $where, $params, 's.status_name = "Closed"', true);
 $sla = rep_count($pdo, $where, $params, 't.sla_breach = 1', false);
 $pending = rep_count($pdo, $where, $params, 's.status_name = "Pending Approval"', true);
+$stuckCnt = rep_count($pdo, $where, $params, 's.status_name = "Stuck"', true);
+$rejectedCnt = rep_count($pdo, $where, $params, 'EXISTS (SELECT 1 FROM ticket_approvals ta WHERE ta.ticket_id=t.id AND ta.approval_status="rejected")', false);
+
+$awaitingAudit = 0;
+try {
+    $awaitSql = 'SELECT COUNT(*) c FROM tickets t JOIN ticket_statuses s ON s.id=t.status_id WHERE ' . $where . ' AND ' . tickets_awaiting_audit_sql('t');
+    $ast = $pdo->prepare($awaitSql);
+    $ast->execute($params);
+    $awaitingAudit = (int) ($ast->fetch()['c'] ?? 0);
+} catch (Throwable $e) {
+    $awaitingAudit = $closedDone;
+}
+
+$wfRep = ['awaiting_level' => 0, 'stale_level' => 0, 'reopened' => 0, 'by_level' => [1 => 0, 2 => 0, 3 => 0]];
+try {
+    $st = $pdo->prepare(
+        'SELECT COUNT(DISTINCT t.id) c FROM tickets t JOIN ticket_assignees ta ON ta.ticket_id=t.id AND ta.assignment_status="active" WHERE ' . $where
+    );
+    $st->execute($params);
+    $wfRep['awaiting_level'] = (int) ($st->fetch()['c'] ?? 0);
+    $st = $pdo->prepare(
+        'SELECT ta.assignment_level lvl, COUNT(DISTINCT t.id) c FROM tickets t
+         JOIN ticket_assignees ta ON ta.ticket_id=t.id AND ta.assignment_status="active" WHERE ' . $where . ' GROUP BY ta.assignment_level'
+    );
+    $st->execute($params);
+    foreach ($st->fetchAll() as $r) {
+        $wfRep['by_level'][(int) $r['lvl']] = (int) $r['c'];
+    }
+    $st = $pdo->prepare('SELECT COUNT(*) c FROM tickets t WHERE ' . $where . ' AND t.reopened_at IS NOT NULL');
+    $st->execute($params);
+    $wfRep['reopened'] = (int) ($st->fetch()['c'] ?? 0);
+} catch (Throwable $e) {
+    /* pre-migration */
+}
+
+$roleKey = (string) current_user()['role_key'];
+$reportsScopeLabel = match ($roleKey) {
+    'user' => 'Your tickets only',
+    'hod', 'director' => 'Your department',
+    default => 'All tickets',
+};
 
 $stAvg = $pdo->prepare(
     'SELECT AVG(t.response_time_minutes) v FROM tickets t JOIN ticket_statuses s ON s.id=t.status_id WHERE ' . $where . ' AND s.status_name="Completed"'
@@ -214,17 +263,18 @@ $includeCharts = true;
 
 require __DIR__ . '/includes/shell_begin.php';
 ?>
+<link rel="stylesheet" href="assets/css/report.css">
 
 <div class="container-fluid px-3 px-lg-4">
     <div class="page-title-block mb-3 d-flex flex-wrap justify-content-between gap-2">
         <div>
             <h1>Reports</h1>
-            <div class="subtitle">Operational analytics and export-ready summaries</div>
+            <div class="subtitle">Operational analytics — <?php echo e($reportsScopeLabel); ?></div>
         </div>
-        <div class="d-flex flex-wrap gap-2">
-            <a class="btn btn-outline-muted btn-sm" href="reports.php?<?php echo e(http_build_query(array_merge($_GET, ['export' => 'csv']))); ?>">Export CSV</a>
-            <button type="button" class="btn btn-outline-muted btn-sm" onclick="alert('Export PDF is a placeholder in this prototype.');">Export PDF</button>
-            <button type="button" class="btn btn-outline-muted btn-sm" onclick="window.print();">Print Report</button>
+        <div class="report-export-toolbar">
+            <a class="btn btn-outline-secondary btn-sm" href="reports.php?<?php echo e(http_build_query(array_merge($_GET, ['export' => 'csv']))); ?>"><i class="bi bi-filetype-csv me-1"></i>Export CSV</a>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="alert('Export PDF is a placeholder in this prototype.');"><i class="bi bi-filetype-pdf me-1"></i>Export PDF</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print();"><i class="bi bi-printer me-1"></i>Print Report</button>
         </div>
     </div>
 
@@ -246,6 +296,10 @@ require __DIR__ . '/includes/shell_begin.php';
                         <option value="<?php echo (int) $d['id']; ?>" <?php echo $deptId === (int) $d['id'] ? 'selected' : ''; ?>><?php echo e($d['department_name']); ?></option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small text-muted mb-1">Org Code</label>
+                <input type="text" class="form-control form-control-sm" name="org_code" value="<?php echo e($orgCode); ?>" placeholder="Org code">
             </div>
             <div class="col-md-2">
                 <label class="form-label small text-muted mb-1">Category</label>
@@ -292,6 +346,14 @@ require __DIR__ . '/includes/shell_begin.php';
             <div class="stat-card"><div class="label">Pending approval</div><div class="value"><?php echo $pending; ?></div></div>
         </div>
     </div>
+
+    <?php require __DIR__ . '/includes/reports_workflow_metrics.php'; ?>
+
+    <?php
+    $analyticsDays = isset($_GET['analytics_days']) ? (int) $_GET['analytics_days'] : 30;
+    $analyticsPayload = analytics_dashboard_payload(null, ['days' => $analyticsDays]);
+    require __DIR__ . '/includes/dashboard_analytics_section.php';
+    ?>
 
     <div class="row g-3 mb-3">
         <div class="col-lg-4">
@@ -369,7 +431,8 @@ window.__REPORTS__ = {
   createdLine: <?php echo json_encode($createdLine); ?>,
   resolvedLine: <?php echo json_encode($resolvedLine); ?>,
   slaLabels: <?php echo json_encode($slaLabels, JSON_UNESCAPED_UNICODE); ?>,
-  slaValues: <?php echo json_encode($slaValues); ?>
+  slaValues: <?php echo json_encode($slaValues); ?>,
+  analytics: <?php echo json_encode($analyticsPayload, JSON_UNESCAPED_UNICODE); ?>
 };
 </script>
 

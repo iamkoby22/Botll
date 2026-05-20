@@ -1,10 +1,9 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/init.php';
 require_login();
-require_roles(['super_admin', 'admin']);
+require_roles(['super_admin']);
 
 $id = (int) ($_GET['id'] ?? 0);
 if ($id < 1) {
@@ -22,7 +21,7 @@ if (!$user) {
 }
 
 $actor = current_user();
-if ((string) $user['role_key'] === 'super_admin' && (string) $actor['role_key'] !== 'super_admin') {
+if (is_super_admin_role((string) $user['role_key']) && !is_super_admin_role((string) $actor['role_key'])) {
     http_response_code(403);
     echo 'Forbidden';
     exit;
@@ -57,6 +56,9 @@ if (is_post()) {
         }
         if ($full === '' || $email === '' || $username === '' || $rid < 1) {
             $errors[] = 'Name, email, username, and role are required.';
+        }
+        if (in_array($rk, ['hod', 'director'], true) && $dept < 1) {
+            $errors[] = 'Department is required for HOD and Director roles.';
         }
         if ($newPass !== '' && strlen($newPass) < 8) {
             $errors[] = 'Password must be at least 8 characters.';
@@ -121,7 +123,7 @@ require __DIR__ . '/includes/shell_begin.php';
                 <input class="form-control" type="password" name="new_password" placeholder="Leave blank to keep current">
             </div>
             <div class="col-md-6">
-                <label class="form-label fw-semibold small">Role</label>
+                <label class="form-label fw-semibold small">Access Role</label>
                 <select class="form-select" name="role_id" required>
                     <?php foreach ($roles as $r) :
                         $rk = (string) $r['role_key'];

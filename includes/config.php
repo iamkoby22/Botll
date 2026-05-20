@@ -1,6 +1,10 @@
 <?php
-
 declare(strict_types=1);
+
+/** Demo-safe: log errors, do not print warnings/notices to the browser. */
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
 
 $localConfig = __DIR__ . '/config.local.php';
 if (is_file($localConfig)) {
@@ -40,6 +44,10 @@ if (!defined('UPLOAD_PATH')) {
 
 if (!defined('SESSION_NAME')) {
     define('SESSION_NAME', 'botll_sid');
+}
+
+if (!defined('APP_DISPLAY_NAME')) {
+    define('APP_DISPLAY_NAME', 'SBS Support Requests');
 }
 
 /** Web path prefix if the app is not at domain root (e.g. "/botll"). Leading slash, no trailing slash, or empty string. */

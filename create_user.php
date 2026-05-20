@@ -1,10 +1,9 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/init.php';
 require_login();
-require_roles(['super_admin', 'admin']);
+require_roles(['super_admin']);
 
 $pdo = db();
 $actor = current_user();
@@ -36,6 +35,10 @@ if (is_post()) {
         if ($vals['full_name'] === '' || $vals['username'] === '' || $vals['email'] === '' || $rid < 1) {
             $errors[] = 'Name, username, email, and role are required.';
         }
+        $dept = (int) $vals['department_id'];
+        if (in_array($rk, ['hod', 'director'], true) && $dept < 1) {
+            $errors[] = 'Department is required for HOD and Director roles.';
+        }
         if (strlen($vals['password']) < 8) {
             $errors[] = 'Password must be at least 8 characters.';
         }
@@ -51,21 +54,28 @@ if (is_post()) {
             }
         }
         if (!$errors) {
-            $dept = (int) $vals['department_id'];
-            $dept = $dept > 0 ? $dept : null;
+            $deptVal = $dept > 0 ? $dept : null;
             $hash = password_hash($vals['password'], PASSWORD_DEFAULT);
-            $stmt = $pdo->prepare(
-                'INSERT INTO users (full_name, email, username, password_hash, role_id, department_id, status) VALUES (?,?,?,?,?,?,?)'
-            );
-            $stmt->execute([
-                $vals['full_name'],
-                $vals['email'],
-                $vals['username'],
-                $hash,
-                $rid,
-                $dept,
-                $vals['status'] === 'disabled' ? 'disabled' : 'active',
-            ]);
+            $statusVal = $vals['status'] === 'disabled' ? 'disabled' : 'active';
+            try {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO users (full_name, email, username, password_hash, role_id, department_id, status, must_change_password) VALUES (?,?,?,?,?,?,?,1)'
+                );
+                $stmt->execute([
+                    $vals['full_name'], $vals['email'], $vals['username'], $hash, $rid, $deptVal, $statusVal,
+                ]);
+            } catch (Throwable $e) {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO users (full_name, email, username, password_hash, role_id, department_id, status) VALUES (?,?,?,?,?,?,?)'
+                );
+                $stmt->execute([
+                    $vals['full_name'], $vals['email'], $vals['username'], $hash, $rid, $deptVal, $statusVal,
+                ]);
+            }
+            $newId = (int) $pdo->lastInsertId();
+            if ($newId > 0 && users_has_must_change_column()) {
+                $pdo->prepare('UPDATE users SET must_change_password = 1 WHERE id = ?')->execute([$newId]);
+            }
             flash_set('success', 'User created.');
             redirect('users.php');
         }
@@ -118,7 +128,7 @@ require __DIR__ . '/includes/shell_begin.php';
                 <input class="form-control" type="password" name="admin_password_confirm" required autocomplete="current-password" placeholder="Re-enter your password to authorize this action">
             </div>
             <div class="col-md-6">
-                <label class="form-label fw-semibold small">Role</label>
+                <label class="form-label fw-semibold small">Access Role</label>
                 <select class="form-select" name="role_id" required>
                     <option value="">Select</option>
                     <?php foreach ($roles as $r) :

@@ -1,26 +1,21 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/init.php';
 require_page('create_ticket');
 
+$role = (string) (current_user()['role_key'] ?? '');
+if (!in_array($role, ['super_admin', 'admin'], true) && request_logic_tables_exist()) {
+    redirect('new_request.php');
+}
+
 $pdo = db();
 $u = current_user();
 
-$departments = $pdo->query('SELECT * FROM departments ORDER BY department_name')->fetchAll();
-$categories = $pdo->query('SELECT * FROM ticket_categories ORDER BY category_name')->fetchAll();
-$priorities = $pdo->query('SELECT * FROM ticket_priorities ORDER BY priority_level')->fetchAll();
+$departments = ref_active_departments();
+$categories = ref_active_categories();
+$priorities = ref_active_priorities();
 $usersList = $pdo->query('SELECT id, full_name FROM users WHERE status="active" ORDER BY full_name')->fetchAll();
-$templates = $pdo->query(
-    'SELECT tt.*, c.category_name, p.priority_name, d.department_name
-     FROM ticket_templates tt
-     JOIN ticket_categories c ON c.id = tt.category_id
-     JOIN ticket_priorities p ON p.id = tt.priority_id
-     JOIN departments d ON d.id = tt.department_id
-     ORDER BY tt.template_title'
-)->fetchAll();
-
 $errors = [];
 $values = [
     'category_id' => (string) ($_POST['category_id'] ?? ''),
@@ -31,21 +26,34 @@ $values = [
     'account_number' => trim((string) ($_POST['account_number'] ?? '')),
 ];
 
-if (!is_post() && isset($_GET['template_id'])) {
-    $tid = (int) $_GET['template_id'];
-    if ($tid > 0) {
-        $tp = $pdo->prepare('SELECT * FROM ticket_templates WHERE id = ? LIMIT 1');
-        $tp->execute([$tid]);
-        $tpl = $tp->fetch();
-        if ($tpl) {
-            $values['category_id'] = (string) $tpl['category_id'];
-            $values['priority_id'] = (string) $tpl['priority_id'];
-            $values['department_id'] = (string) $tpl['department_id'];
-            $values['description'] = (string) $tpl['description'];
-            $values['subject'] = (string) $tpl['template_title'];
-            if (!empty($tpl['default_account_number'])) {
-                $values['account_number'] = (string) $tpl['default_account_number'];
-            }
+$activeTemplateId = (int) ($_GET['template_id'] ?? $_POST['template_id'] ?? 0);
+$templateFields = [];
+$customFieldValues = [];
+$collectedCustomFields = [];
+
+if ($activeTemplateId > 0) {
+    $templateFields = ticket_template_fields_load($activeTemplateId);
+}
+
+if (is_post()) {
+    $postedCustom = $_POST['custom_fields'] ?? [];
+    $customFieldValues = is_array($postedCustom) ? $postedCustom : [];
+} elseif ($activeTemplateId > 0 && $templateFields) {
+    ticket_custom_fields_apply_defaults($templateFields, $customFieldValues);
+}
+
+if (!is_post() && $activeTemplateId > 0) {
+    $tp = $pdo->prepare('SELECT * FROM ticket_templates WHERE id = ? LIMIT 1');
+    $tp->execute([$activeTemplateId]);
+    $tpl = $tp->fetch();
+    if ($tpl) {
+        $values['category_id'] = (string) $tpl['category_id'];
+        $values['priority_id'] = (string) $tpl['priority_id'];
+        $values['department_id'] = (string) $tpl['department_id'];
+        $values['description'] = (string) $tpl['description'];
+        $values['subject'] = (string) $tpl['template_title'];
+        if (!empty($tpl['default_account_number'])) {
+            $values['account_number'] = (string) $tpl['default_account_number'];
         }
     }
 }
@@ -54,10 +62,11 @@ if (is_post()) {
     if (!csrf_verify($_POST['_csrf'] ?? null)) {
         $errors[] = 'Invalid session token.';
     } else {
-        $templateId = (int) ($_POST['template_id'] ?? 0);
-        if ($templateId > 0) {
+        $activeTemplateId = (int) ($_POST['template_id'] ?? 0);
+        if ($activeTemplateId > 0) {
+            $templateFields = ticket_template_fields_load($activeTemplateId);
             $tp = $pdo->prepare('SELECT * FROM ticket_templates WHERE id = ? LIMIT 1');
-            $tp->execute([$templateId]);
+            $tp->execute([$activeTemplateId]);
             $tpl = $tp->fetch();
             if ($tpl) {
                 $values['category_id'] = (string) $tpl['category_id'];
@@ -71,6 +80,10 @@ if (is_post()) {
                     $values['account_number'] = (string) $tpl['default_account_number'];
                 }
             }
+        }
+
+        if ($activeTemplateId > 0 && $templateFields) {
+            $collectedCustomFields = ticket_custom_fields_validate($templateFields, $customFieldValues, $errors);
         }
 
         $cat = (int) ($values['category_id'] ?? 0);
@@ -97,9 +110,7 @@ if (is_post()) {
                 $creator = (int) $u['id'];
                 $primaryAssignee = $assignees[0] ?? null;
                 $statusOpen = (int) $pdo->query('SELECT id FROM ticket_statuses WHERE status_name="Open" LIMIT 1')->fetch()['id'];
-                $statusPending = (int) $pdo->query('SELECT id FROM ticket_statuses WHERE status_name="Pending Approval" LIMIT 1')->fetch()['id'];
-                $needsApproval = $primaryAssignee !== null && (int) $primaryAssignee > 0;
-                $statusId = $needsApproval ? $statusPending : $statusOpen;
+                $statusId = $statusOpen;
 
                 $ins = $pdo->prepare(
                     'INSERT INTO tickets (ticket_number, subject, description, category_id, priority_id, account_number, status_id, department_id, created_by, assigned_to, date_completed, sla_breach, attachments_count, created_at)
@@ -159,37 +170,23 @@ if (is_post()) {
                     $pdo->prepare('UPDATE tickets SET attachments_count = ? WHERE id = ?')->execute([$atts, $tid]);
                 }
 
-                $sort = 1;
-                foreach ($assignees as $aid) {
+                $levels = isset($_POST['assignee_level']) && is_array($_POST['assignee_level'])
+                    ? array_map('intval', $_POST['assignee_level'])
+                    : [];
+                $ordered = [];
+                $autoLvl = 1;
+                foreach ($assignees as $i => $aid) {
                     if ($aid < 1) {
                         continue;
                     }
-                    $pdo->prepare(
-                        'INSERT INTO ticket_assignees (ticket_id, user_id, approval_status, sort_order) VALUES (?,?,?,?)
-                         ON DUPLICATE KEY UPDATE sort_order = VALUES(sort_order)'
-                    )->execute([$tid, $aid, 'pending', $sort++]);
-                }
-
-                // Business rule: when a ticket is assigned and no separate approver is selected,
-                // the primary assignee becomes the pending approver.
-                if ($needsApproval) {
-                    // Ensure we don't duplicate approvals if one already exists.
-                    $ac = $pdo->prepare('SELECT COUNT(*) FROM ticket_approvals WHERE ticket_id = ?');
-                    $ac->execute([$tid]);
-                    $apCount = (int) $ac->fetchColumn();
-                    if ($apCount === 0) {
-                        $pdo->prepare(
-                            'INSERT INTO ticket_approvals (ticket_id, approver_id, approval_level, approval_status) VALUES (?,?,1,\"pending\")'
-                        )->execute([$tid, (int) $primaryAssignee]);
+                    $lvl = (int) ($levels[$i] ?? $autoLvl);
+                    if ($lvl < 1) {
+                        $lvl = $autoLvl;
                     }
-                    notify_user(
-                        (int) $primaryAssignee,
-                        'Approval required',
-                        'Ticket ' . $ticketNumber . ' is waiting for your approval.',
-                        'approval',
-                        'ticket_detail.php?id=' . $tid
-                    );
+                    $ordered[] = ['user_id' => $aid, 'level' => $lvl];
+                    $autoLvl++;
                 }
+                ticket_assignment_save_chain($tid, $ordered);
 
                 try {
                     ticket_log_comment($tid, $creator, 'Ticket created.', 'system');
@@ -197,18 +194,18 @@ if (is_post()) {
                     // ticket_comments table may be missing until migration
                 }
 
+                if ($activeTemplateId > 0 && $collectedCustomFields) {
+                    ticket_custom_fields_save($tid, $activeTemplateId, $collectedCustomFields);
+                }
+
                 $detailUrl = 'ticket_detail.php?id=' . $tid;
-                foreach ($assignees as $aid) {
-                    if ($aid < 1) {
-                        continue;
-                    }
-                    notify_user(
-                        $aid,
-                        'New ticket assigned',
-                        'You were assigned to ' . $ticketNumber,
-                        'assignment',
-                        $detailUrl
-                    );
+                foreach ($ordered as $item) {
+                    $aid = (int) $item['user_id'];
+                    $lvl = (int) $item['level'];
+                    $msg = $lvl === 1
+                        ? 'You are Level 1 on ' . $ticketNumber . ' — you can start work now.'
+                        : 'You are Level ' . $lvl . ' on ' . $ticketNumber . ' — you will be notified when it is your turn.';
+                    notify_user($aid, 'New ticket assigned', $msg, 'assignment', $detailUrl);
                 }
 
                 $pdo->commit();
@@ -243,24 +240,14 @@ require __DIR__ . '/includes/shell_begin.php';
 
     <form class="card-surface p-3 p-lg-4" method="post" enctype="multipart/form-data">
         <input type="hidden" name="_csrf" value="<?php echo e(csrf_token()); ?>">
+        <?php if ($activeTemplateId > 0) : ?>
+            <input type="hidden" name="template_id" value="<?php echo (int) $activeTemplateId; ?>">
+        <?php endif; ?>
 
         <div class="d-flex flex-wrap gap-2 mb-4">
             <div class="dropdown">
                 <button class="btn btn-outline-muted btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    Use an existing Template
-                </button>
-                <ul class="dropdown-menu dropdown-menu-start" style="max-height:280px;overflow:auto;">
-                    <?php foreach ($templates as $tpl) : ?>
-                        <li>
-                            <a class="dropdown-item" href="create_ticket.php?template_id=<?php echo (int) $tpl['id']; ?>">
-                                <?php echo e($tpl['template_title']); ?> · <?php echo e($tpl['department_name']); ?>
-                            </a>
-                        </li>
-                    <?php endforeach; ?>
-                </ul>
-            </div>
-        </div>
-
+        <div class="alert alert-light border small mb-3">Business Services requests use <a href="new_request.php">New Request</a>.</div>
         <div class="row g-3">
             <div class="col-md-6">
                 <label class="form-label fw-semibold small">Category</label>
@@ -285,7 +272,7 @@ require __DIR__ . '/includes/shell_begin.php';
                 <select name="department_id" class="form-select" required>
                     <option value="">Select department</option>
                     <?php foreach ($departments as $d) : ?>
-                        <option value="<?php echo (int) $d['id']; ?>" <?php echo ((string) $d['id'] === $values['department_id']) ? 'selected' : ''; ?>><?php echo e($d['department_name']); ?></option>
+                        <option value="<?php echo (int) $d['id']; ?>" <?php echo ((string) $d['id'] === $values['department_id']) ? 'selected' : ''; ?>><?php echo e(department_display_label($d)); ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -302,8 +289,15 @@ require __DIR__ . '/includes/shell_begin.php';
                 <textarea class="form-control" name="description" rows="5" required placeholder="Brief summary of your request"><?php echo e($values['description']); ?></textarea>
             </div>
 
+            <?php
+            if ($activeTemplateId > 0 && $templateFields) {
+                require __DIR__ . '/includes/custom_fields_form.php';
+            }
+            ?>
+
             <div class="col-12">
-                <label class="form-label fw-semibold small">Assigned to:</label>
+                <label class="form-label fw-semibold small">Assignment workflow (levels)</label>
+                <p class="small text-muted mb-2">Level 1 works first, then approves to Level 2; the final level marks Done.</p>
                 <div id="assigneeRows" class="d-flex flex-column gap-2">
                     <div class="d-flex gap-2 align-items-center assignee-row">
                         <select class="form-select" name="assignee_id[]">
@@ -312,9 +306,14 @@ require __DIR__ . '/includes/shell_begin.php';
                                 <option value="<?php echo (int) $uu['id']; ?>"><?php echo e($uu['full_name']); ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <select class="form-select" name="assignee_level[]" style="max-width:120px;">
+                            <option value="1">Level 1</option>
+                            <option value="2">Level 2</option>
+                            <option value="3">Level 3</option>
+                        </select>
                     </div>
                 </div>
-                <button type="button" class="btn btn-link btn-sm px-0 mt-2" id="addAssigneeRow"><i class="bi bi-plus-circle"></i> Add new</button>
+                <button type="button" class="btn btn-link btn-sm px-0 mt-2" id="addAssigneeRow"><i class="bi bi-plus-circle"></i> Add assignee</button>
             </div>
 
             <div class="col-12">

@@ -1,9 +1,7 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/init.php';
-require_once __DIR__ . '/includes/service_catalog.php';
 require_page('requests');
 
 $st = (string) ($_GET['st'] ?? 'all');
@@ -19,13 +17,13 @@ if (!in_array($queue, $allowedQueue, true)) {
 
 $uid = (int) current_user()['id'];
 $pdo = db();
-$scope = tickets_scope_sql('t');
-
-$catalog = service_catalog_rows();
-$groups = [];
-foreach ($catalog as $c) {
-    $g = (string) $c['group_name'];
-    $groups[$g][] = $c;
+$orgCode = trim((string) ($_GET['org_code'] ?? ''));
+$scope = tickets_active_scope_sql('t');
+if (function_exists('ticket_apply_archive_thresholds')) {
+    ticket_apply_archive_thresholds(current_user());
+}
+if (function_exists('ticket_apply_sla_status_batch')) {
+    ticket_apply_sla_status_batch();
 }
 
 $base = 'SELECT DISTINCT t.*, s.status_name, p.priority_name, c.category_name, cu.full_name AS created_name,
@@ -44,9 +42,18 @@ $params = [];
 $involvedSql = '(t.created_by = ? OR t.assigned_to = ? OR EXISTS (SELECT 1 FROM ticket_assignees ta WHERE ta.ticket_id = t.id AND ta.user_id = ?)
  OR EXISTS (SELECT 1 FROM ticket_approvals tap WHERE tap.ticket_id = t.id AND tap.approver_id = ?))';
 
-$privileged = in_array((string) current_user()['role_key'], ['super_admin', 'admin'], true);
+$privileged = is_super_admin_role() || current_user_role_key() === 'admin';
+$sbsScopedRole = false;
+if (function_exists('sbs_workflow_enabled') && sbs_workflow_enabled()) {
+    $rk = current_user_role_key();
+    $sbsScopedRole = is_super_admin_role($rk) || in_array($rk, [
+        'restricted_pillar_admin',
+        'unrestricted_pillar_admin',
+        'general_pillar_admin',
+    ], true);
+}
 
-if (!$privileged) {
+if (!$privileged && !$sbsScopedRole) {
     $wheres[] = $involvedSql;
     array_push($params, $uid, $uid, $uid, $uid);
 }
@@ -74,6 +81,13 @@ if ($st === 'pending_approval') {
 } elseif ($st === 'rejected') {
     $wheres[] = '(s.status_name = "Cancelled" OR EXISTS (SELECT 1 FROM ticket_approvals tx WHERE tx.ticket_id=t.id AND tx.approval_status="rejected"))';
 }
+if ($orgCode !== '' && function_exists('sbs_org_code_filter_sql')) {
+    [$orgSql, $orgParams] = sbs_org_code_filter_sql('t', $orgCode);
+    if ($orgSql !== '') {
+        $wheres[] = $orgSql;
+        array_push($params, ...$orgParams);
+    }
+}
 
 $sql = $base . ' WHERE ' . implode(' AND ', $wheres) . ' ORDER BY t.created_at DESC LIMIT 200';
 $stmt = $pdo->prepare($sql);
@@ -95,9 +109,18 @@ require __DIR__ . '/includes/shell_begin.php';
             <div class="subtitle">Submit and track service requests</div>
         </div>
         <div class="d-flex flex-wrap gap-2">
-            <a class="btn btn-accent btn-sm" href="#catalog"><i class="bi bi-grid"></i> Browse Catalog</a>
             <a class="btn btn-outline-muted btn-sm" href="create_ticket.php"><i class="bi bi-plus-lg"></i> New Request (advanced)</a>
         </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+        <a class="btn btn-accent" href="new_request.php"><i class="bi bi-plus-lg"></i> New Request</a>
+        <form method="get" class="d-flex gap-2 ms-auto">
+            <input type="hidden" name="st" value="<?php echo e($st); ?>">
+            <input type="hidden" name="queue" value="<?php echo e($queue); ?>">
+            <input type="text" name="org_code" class="form-control form-control-sm" placeholder="Org Code" value="<?php echo e($orgCode); ?>">
+            <button class="btn btn-outline-muted btn-sm" type="submit">Filter</button>
+        </form>
     </div>
 
     <div class="alert alert-light border small mb-3">
@@ -105,31 +128,7 @@ require __DIR__ . '/includes/shell_begin.php';
         <strong>Pending My Approval</strong> means you must approve or reject — open the ticket to see Approve/Reject when you are on the approval chain (or have an override role).
     </div>
 
-    <h2 class="h5 fw-bold mb-2" id="catalog">Service catalog</h2>
-    <?php foreach ($groups as $gname => $items) : ?>
-        <div class="mb-3">
-            <div class="text-muted small fw-semibold mb-2"><?php echo e($gname); ?></div>
-            <div class="row g-3">
-                <?php foreach ($items as $it) : ?>
-                    <div class="col-md-6 col-xl-4">
-                        <div class="card-surface p-3 h-100 d-flex flex-column">
-                            <div class="d-flex align-items-start gap-2 mb-2">
-                                <span class="badge rounded-pill text-bg-light border"><i class="bi <?php echo e((string) $it['icon_class']); ?>"></i></span>
-                                <div>
-                                    <div class="fw-bold"><?php echo e((string) $it['title']); ?></div>
-                                    <div class="small text-muted"><?php echo e((string) $it['description']); ?></div>
-                                </div>
-                            </div>
-                            <div class="small text-muted mt-auto mb-2">Est. <?php echo e((string) $it['est_duration']); ?></div>
-                            <a class="btn btn-accent btn-sm w-100" href="new_request.php?service_id=<?php echo (int) $it['id']; ?>">Request</a>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
-    <?php endforeach; ?>
-
-    <h2 class="h5 fw-bold mb-2 mt-4">My requests</h2>
+    <h2 class="h5 fw-bold mb-2">My requests</h2>
     <ul class="nav nav-pills flex-wrap gap-2 mb-2">
         <?php
         $mainTabs = [

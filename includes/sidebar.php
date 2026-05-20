@@ -1,20 +1,22 @@
 <?php
-
 declare(strict_types=1);
 
 /** @var string $activeNav */
 
 $u = current_user();
 $nav = [
-    'create_ticket' => ['href' => 'create_ticket.php', 'label' => 'Create Ticket', 'icon' => 'bi-plus-square'],
     'dashboard' => ['href' => 'dashboard.php', 'label' => 'Dashboard', 'icon' => 'bi-speedometer2'],
-    'all_tickets' => ['href' => 'all_tickets.php', 'label' => 'All Tickets', 'icon' => 'bi-ticket-detailed'],
+    'create_ticket' => ['href' => 'new_request.php', 'label' => 'New Request', 'icon' => 'bi-plus-square'],
     'my_tickets' => ['href' => 'my_tickets.php', 'label' => 'My Tickets', 'icon' => 'bi-person-lines-fill'],
-    'ticket_templates' => ['href' => 'ticket_templates.php', 'label' => 'Ticket Templates', 'icon' => 'bi-journal-text'],
+    'all_tickets' => ['href' => 'all_tickets.php', 'label' => 'All Tickets', 'icon' => 'bi-ticket-detailed'],
     'requests' => ['href' => 'requests.php', 'label' => 'Requests', 'icon' => 'bi-inboxes'],
-    'users' => ['href' => 'users.php', 'label' => 'User/Access', 'icon' => 'bi-people'],
+    'archive' => ['href' => 'archive.php', 'label' => 'Archive', 'icon' => 'bi-archive'],
     'reports' => ['href' => 'reports.php', 'label' => 'Reports', 'icon' => 'bi-graph-up-arrow'],
+    'ai_reviews' => ['href' => 'ai_reviews.php', 'label' => 'AI Reviews', 'icon' => 'bi-robot'],
+    'ticket_templates' => ['href' => 'ticket_templates.php', 'label' => 'Request Logic', 'icon' => 'bi-journal-text'],
     'faq' => ['href' => 'faq.php', 'label' => 'FAQ', 'icon' => 'bi-question-circle'],
+    'users' => ['href' => 'users.php', 'label' => 'User/Access', 'icon' => 'bi-people'],
+    'auditing' => ['href' => 'auditing.php', 'label' => 'Auditing', 'icon' => 'bi-shield-check'],
     'settings' => ['href' => 'settings.php', 'label' => 'Settings', 'icon' => 'bi-gear'],
 ];
 ?>
@@ -33,26 +35,14 @@ $nav = [
         <div class="d-flex align-items-center gap-2">
             <span class="brand-badge">B</span>
             <div>
-                <div class="fw-semibold">Botll</div>
-                <div class="small text-white-50">Support Requests</div>
+                <div class="fw-semibold"><?php echo e(defined('APP_DISPLAY_NAME') ? APP_DISPLAY_NAME : 'SBS Support Requests'); ?></div>
+                <div class="small text-white-50">Business Services</div>
             </div>
         </div>
     </div>
     <nav class="nav flex-column px-2 py-3 gap-1 flex-grow-1">
         <?php foreach ($nav as $key => $item) :
-            if ($key === 'users' && !can_access('users')) {
-                continue;
-            }
-            if ($key === 'reports' && !can_access('reports')) {
-                continue;
-            }
-            if ($key === 'settings' && !can_access('settings')) {
-                continue;
-            }
-            if ($key === 'faq' && !can_access('faq')) {
-                continue;
-            }
-            if ($key === 'ticket_templates' && !can_access('ticket_templates')) {
+            if (!sidebar_show_nav($key)) {
                 continue;
             }
             $isActive = $activeNav === $key;
@@ -69,7 +59,7 @@ $nav = [
             <div class="tilia-avatar" aria-hidden="true">T</div>
             <div class="small">
                 <div class="text-white-50 mb-1">For supports and report talk to</div>
-                <div class="fw-semibold">Tilia</div>
+                <div class="fw-semibold tilia-brand-name">Tilia</div>
                 <div class="text-white-50">AI assistant</div>
             </div>
         </div>

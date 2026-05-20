@@ -1,8 +1,8 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/init.php';
+require_once __DIR__ . '/includes/settings_reference_admin.php';
 require_page('settings');
 
 $u = current_user();
@@ -11,9 +11,12 @@ $pdo = db();
 $errors = [];
 $success = '';
 
-$categories = $pdo->query('SELECT * FROM ticket_categories ORDER BY category_name')->fetchAll();
-$priorities = $pdo->query('SELECT * FROM ticket_priorities ORDER BY priority_level')->fetchAll();
 $statuses = $pdo->query('SELECT * FROM ticket_statuses ORDER BY id')->fetchAll();
+$refData = settings_reference_data($pdo);
+$categories = $refData['categories'];
+$priorities = $refData['priorities'];
+$departments = $refData['departments'];
+$faqRows = $refData['faqs'];
 
 if (is_post()) {
     if (!csrf_verify($_POST['_csrf'] ?? null)) {
@@ -35,16 +38,14 @@ if (is_post()) {
             $pk = 'user_pref_' . (int) $u['id'] . '_density';
             setting_set($pk, trim((string) ($_POST['pref_theme'] ?? 'light')), 'preferences');
             $success = 'Preferences saved.';
-        } elseif ($action === 'add_category' && $isSuper) {
-            $name = trim((string) ($_POST['category_name'] ?? ''));
-            if ($name !== '') {
-                try {
-                    $pdo->prepare('INSERT INTO ticket_categories (category_name) VALUES (?)')->execute([$name]);
-                    $success = 'Category added.';
-                } catch (Throwable $e) {
-                    $errors[] = 'Could not add category (duplicate?).';
-                }
-            }
+        }
+        settings_handle_reference_post($pdo, $isSuper, $errors, $success);
+        if ($success || $errors) {
+            $refData = settings_reference_data($pdo);
+            $categories = $refData['categories'];
+            $priorities = $refData['priorities'];
+            $departments = $refData['departments'];
+            $faqRows = $refData['faqs'];
         }
     }
 }
@@ -130,27 +131,7 @@ require __DIR__ . '/includes/shell_begin.php';
                 </div>
             </div>
 
-            <div class="col-lg-6">
-                <div class="card-surface p-3 p-lg-4 h-100">
-                    <h2 class="h6 fw-bold mb-3">Ticket categories</h2>
-                    <div class="table-responsive mb-3">
-                        <table class="table table-sm mb-0">
-                            <thead><tr><th>Name</th></tr></thead>
-                            <tbody>
-                                <?php foreach ($categories as $c) : ?>
-                                    <tr><td><?php echo e($c['category_name']); ?></td></tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                    <form method="post" class="d-flex gap-2">
-                        <input type="hidden" name="_csrf" value="<?php echo e(csrf_token()); ?>">
-                        <input type="hidden" name="action" value="add_category">
-                        <input class="form-control form-control-sm" name="category_name" placeholder="New category name">
-                        <button class="btn btn-outline-muted btn-sm" type="submit">Add</button>
-                    </form>
-                </div>
-            </div>
+            <?php require __DIR__ . '/includes/settings_reference_panels.php'; ?>
         <?php endif; ?>
 
         <div class="col-lg-6">

@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 $u = current_user();
@@ -95,7 +94,9 @@ if (!empty($_SERVER['QUERY_STRING'])) {
                         Signed in as<br><strong><?php echo e($u['full_name'] ?? ''); ?></strong>
                     </li>
                     <li><a class="dropdown-item" href="account.php"><i class="bi bi-person-badge me-2"></i>Account</a></li>
+                    <?php if (can_access('settings')) : ?>
                     <li><a class="dropdown-item" href="settings.php"><i class="bi bi-gear me-2"></i>Settings</a></li>
+                    <?php endif; ?>
                     <li><a class="dropdown-item" href="faq.php"><i class="bi bi-question-circle me-2"></i>FAQ</a></li>
                     <li><button class="dropdown-item" type="button" data-tilia-open="1"><i class="bi bi-chat-dots me-2"></i>Talk to Tilia</button></li>
                     <li><hr class="dropdown-divider"></li>

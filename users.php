@@ -1,12 +1,43 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/init.php';
 require_login();
-require_roles(['super_admin', 'admin']);
+require_roles(['super_admin']);
 
 $pdo = db();
+$actor = current_user();
+
+if (is_post() && csrf_verify($_POST['_csrf'] ?? null) && users_have_approval_status_column()) {
+    $action = (string) ($_POST['action'] ?? '');
+    $targetId = (int) ($_POST['user_id'] ?? 0);
+    if ($targetId > 0 && $action === 'approve_user') {
+        $pdo->prepare(
+            'UPDATE users SET status = "active", approval_status = "approved", approved_by = ?, approved_at = NOW() WHERE id = ?'
+        )->execute([(int) $actor['id'], $targetId]);
+        flash_set('success', 'User approved and can now log in.');
+        redirect('users.php');
+    }
+    if ($targetId > 0 && $action === 'reject_user') {
+        $reason = trim((string) ($_POST['rejection_reason'] ?? ''));
+        $pdo->prepare(
+            'UPDATE users SET approval_status = "rejected", rejection_reason = ? WHERE id = ?'
+        )->execute([$reason !== '' ? $reason : null, $targetId]);
+        flash_set('success', 'Registration rejected.');
+        redirect('users.php');
+    }
+}
+
+$pendingUsers = [];
+if (users_have_approval_status_column()) {
+    $pendingUsers = $pdo->query(
+        'SELECT u.*, r.role_name, d.department_name FROM users u
+         JOIN roles r ON r.id = u.role_id
+         LEFT JOIN departments d ON d.id = u.department_id
+         WHERE u.approval_status = "pending"
+         ORDER BY u.created_at DESC'
+    )->fetchAll();
+}
 
 $q = trim((string) ($_GET['q'] ?? ''));
 $roleId = (int) ($_GET['role_id'] ?? 0);
@@ -60,6 +91,41 @@ if ($f) :
 <?php endif; ?>
 
 <div class="container-fluid px-3 px-lg-4">
+    <?php if ($pendingUsers) : ?>
+    <div class="card-surface p-3 mb-3 border border-warning">
+        <h2 class="h6 fw-bold mb-3">Pending account approvals</h2>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Department</th><th></th></tr></thead>
+                <tbody>
+                <?php foreach ($pendingUsers as $pu) : ?>
+                    <tr>
+                        <td><?php echo e($pu['full_name']); ?></td>
+                        <td><?php echo e($pu['username']); ?></td>
+                        <td><?php echo e($pu['email']); ?></td>
+                        <td><?php echo e((string) ($pu['department_name'] ?? '—')); ?></td>
+                        <td class="text-end text-nowrap">
+                            <form method="post" class="d-inline">
+                                <input type="hidden" name="_csrf" value="<?php echo e(csrf_token()); ?>">
+                                <input type="hidden" name="action" value="approve_user">
+                                <input type="hidden" name="user_id" value="<?php echo (int) $pu['id']; ?>">
+                                <button type="submit" class="btn btn-accent btn-sm">Approve</button>
+                            </form>
+                            <form method="post" class="d-inline ms-1">
+                                <input type="hidden" name="_csrf" value="<?php echo e(csrf_token()); ?>">
+                                <input type="hidden" name="action" value="reject_user">
+                                <input type="hidden" name="user_id" value="<?php echo (int) $pu['id']; ?>">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Reject</button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-3">
         <div class="page-title-block mb-0">
             <h1 class="mb-0">User Management</h1>

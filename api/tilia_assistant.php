@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 // Never emit HTML/notices into the JSON body for this endpoint.
@@ -136,8 +135,9 @@ try {
     }
 
     $merged = array_merge($faqRows, $assistantRows);
+    $actor = tilia_actor_context();
 
-    $local = tilia_answer_local($question, $merged);
+    $local = tilia_answer_local($question, $merged, $actor);
     if (is_string($local) && $local !== '') {
         tilia_emit_json(200, ['ok' => true, 'answer' => $local, 'source' => 'local']);
         exit;
@@ -146,11 +146,11 @@ try {
     if (OPENAI_API_KEY !== '') {
         try {
             $snippet = tilia_faq_snippet_for_openai($merged, $question);
-            $ai = tilia_openai_chat($question, $snippet);
+            $userCtx = tilia_openai_user_context($actor);
+            $ai = tilia_openai_chat($question, $snippet, $userCtx);
             if (!empty($ai['ok']) && !empty($ai['text'])) {
                 $text = trim((string) $ai['text']);
-                $refusalNeedle = 'i can only help with using this ticketing platform';
-                if (stripos($text, $refusalNeedle) !== false && strlen($text) < 420) {
+                if (stripos($text, 'this ticketing platform') !== false && strlen($text) < 420) {
                     tilia_emit_json(200, [
                         'ok' => true,
                         'answer' => tilia_refusal_message(),

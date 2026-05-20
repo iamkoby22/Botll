@@ -95,6 +95,11 @@ body.app-body {
   background: transparent;
 }
 
+.tilia-sidebar-trigger .tilia-brand-name {
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
 .tilia-card {
   padding: 0.85rem 1rem;
   border-radius: var(--radius-card);
@@ -264,18 +269,72 @@ body.app-body {
 }
 
 .login-hero {
+  position: relative;
   min-height: 100vh;
-  background: url("../images/login-hero.jpg") center/cover no-repeat,
-    radial-gradient(1200px 600px at 30% 10%, rgba(227, 27, 141, 0.35), transparent),
-    linear-gradient(135deg, #5b2a86, #2c1749);
+  background-color: #2c1749;
+  background-image: url("../img/abstract-futuristic-school-classroom.jpg");
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
   color: #fff;
   display: flex;
   align-items: flex-end;
   padding: 3rem;
 }
 
+.login-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(27, 15, 48, 0.25) 0%,
+    rgba(27, 15, 48, 0.55) 45%,
+    rgba(27, 15, 48, 0.82) 100%
+  );
+  pointer-events: none;
+}
+
+.login-hero-caption {
+  position: relative;
+  z-index: 1;
+  max-width: 28rem;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.45);
+}
+
 .login-hero-fallback {
-  background: radial-gradient(1200px 600px at 30% 10%, rgba(227, 27, 141, 0.35), transparent), linear-gradient(135deg, #5b2a86, #2c1749);
+  background-image: radial-gradient(1200px 600px at 30% 10%, rgba(227, 27, 141, 0.35), transparent),
+    linear-gradient(135deg, #5b2a86, #2c1749);
+}
+
+.login-hero-fallback::before {
+  background: linear-gradient(180deg, rgba(27, 15, 48, 0.2) 0%, rgba(27, 15, 48, 0.75) 100%);
+}
+
+.login-hero-mobile {
+  min-height: 200px;
+  max-height: 36vh;
+  background-color: #2c1749;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  position: relative;
+}
+
+.login-hero-mobile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(27, 15, 48, 0.15), rgba(27, 15, 48, 0.65));
+  pointer-events: none;
+}
+
+@media (max-width: 991.98px) {
+  .login-panel {
+    min-height: auto;
+    padding-top: 2rem;
+    padding-bottom: 2.5rem;
+  }
 }
 
 .login-hero h2 {
@@ -333,10 +392,10 @@ body.app-body {
 
 .tilia-panel {
   position: fixed;
-  right: 22px;
-  bottom: 22px;
-  width: min(420px, calc(100% - 32px));
-  max-height: min(640px, calc(100% - 32px));
+  right: 20px;
+  bottom: 20px;
+  width: min(520px, calc(100% - 24px));
+  max-height: min(88vh, calc(100% - 24px));
   background: #fff;
   border-radius: 16px;
   box-shadow: 0 24px 48px rgba(24, 15, 45, 0.32);
@@ -353,16 +412,21 @@ body.app-body {
 .tilia-header {
   background: linear-gradient(90deg, #251243, #3a1f66);
   color: #fff;
-  padding: 0.85rem 1rem;
+  padding: 0.95rem 1.1rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
+.tilia-header .tilia-brand-name {
+  color: #fff;
+}
+
 .tilia-body {
-  padding: 0.75rem;
+  padding: 1rem 1rem 0.75rem;
   overflow: auto;
   flex: 1;
+  min-height: 280px;
   background: #faf8fd;
 }
 
@@ -370,9 +434,10 @@ body.app-body {
   border-radius: 999px;
   border: 1px solid var(--color-border);
   background: #fff;
-  font-size: 0.82rem;
-  padding: 0.35rem 0.65rem;
-  margin: 0.2rem 0.25rem 0 0;
+  font-size: 0.8125rem;
+  padding: 0.4rem 0.75rem;
+  margin: 0.2rem 0.28rem 0 0;
+  line-height: 1.25;
 }
 
 .tilia-input .form-control {
@@ -384,11 +449,43 @@ body.app-body {
 }
 
 .chat-bubble {
-  max-width: 88%;
-  padding: 0.55rem 0.75rem;
+  max-width: 92%;
+  padding: 0.65rem 0.85rem;
   border-radius: 14px;
-  font-size: 0.9rem;
-  line-height: 1.35;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  word-wrap: break-word;
+}
+
+.chat-bubble.bot {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 2px 8px rgba(27, 21, 48, 0.06);
+}
+
+.tilia-msg-body p {
+  margin: 0 0 0.5rem;
+  font-size: inherit;
+  line-height: 1.5;
+}
+
+.tilia-msg-body p:last-child {
+  margin-bottom: 0;
+}
+
+.tilia-msg-body ul,
+.tilia-msg-body ol {
+  margin: 0.35rem 0 0.5rem 1.15rem;
+  padding: 0;
+}
+
+.tilia-msg-body li {
+  margin: 0.2rem 0;
+}
+
+.tilia-msg-body strong {
+  font-weight: 600;
+  color: var(--color-text-main);
 }
 
 .chat-bubble.user {
@@ -397,9 +494,16 @@ body.app-body {
   margin-left: auto;
 }
 
-.chat-bubble.bot {
-  background: #fff;
-  border: 1px solid var(--color-border);
+.tilia-input textarea.form-control {
+  border-radius: 12px;
+  resize: vertical;
+  min-height: 2.75rem;
+  max-height: 8rem;
+}
+
+.tilia-input .btn-accent {
+  border-radius: 12px;
+  align-self: flex-end;
 }
 
 .bg-soft-unread {
@@ -439,10 +543,11 @@ body.app-body {
   overflow: hidden;
 }
 
-.chart-card.chart-card--tall .chart-container {
-  height: 260px;
-  min-height: 260px;
-  max-height: 260px;
+.chart-card.chart-card--tall .chart-container,
+.chart-card.chart-card-tall .chart-container {
+  height: 320px;
+  min-height: 320px;
+  max-height: 320px;
 }
 
 .chart-card .chart-container > canvas {

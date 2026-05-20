@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 function flash_set(string $type, string $message): void

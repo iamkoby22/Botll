@@ -56,13 +56,76 @@
     panel.setAttribute("aria-hidden", "true");
   }
 
+  function tiliaEscapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  /**
+   * Safe display: escape first, then allow **bold** and simple lists.
+   */
+  function tiliaFormatAssistantHtml(raw) {
+    var s = tiliaEscapeHtml(String(raw || ""));
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/\*\*/g, "");
+    var lines = s.split(/\r?\n/);
+    var html = "";
+    var mode = null;
+    function flushList() {
+      if (mode === "ul") {
+        html += "</ul>";
+      }
+      if (mode === "ol") {
+        html += "</ol>";
+      }
+      mode = null;
+    }
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var trimmed = line.replace(/^\s+|\s+$/g, "");
+      if (trimmed === "") {
+        flushList();
+        continue;
+      }
+      var ol = trimmed.match(/^(\d+)\.\s+(.*)$/);
+      var ul = trimmed.match(/^[-*]\s+(.*)$/);
+      if (ol) {
+        if (mode !== "ol") {
+          flushList();
+          html += "<ol>";
+          mode = "ol";
+        }
+        html += "<li>" + ol[2] + "</li>";
+      } else if (ul) {
+        if (mode !== "ul") {
+          flushList();
+          html += "<ul>";
+          mode = "ul";
+        }
+        html += "<li>" + ul[1] + "</li>";
+      } else {
+        flushList();
+        html += "<p>" + trimmed + "</p>";
+      }
+    }
+    flushList();
+    return '<div class="tilia-msg-body">' + html + "</div>";
+  }
+
   function appendBubble(text, who) {
     if (!messages) return;
-    const row = document.createElement("div");
+    var row = document.createElement("div");
     row.className = "d-flex " + (who === "user" ? "justify-content-end" : "justify-content-start");
-    const div = document.createElement("div");
+    var div = document.createElement("div");
     div.className = "chat-bubble " + (who === "user" ? "user" : "bot");
-    div.textContent = text;
+    if (who === "bot") {
+      div.innerHTML = tiliaFormatAssistantHtml(text);
+    } else {
+      div.textContent = text;
+    }
     row.appendChild(div);
     messages.appendChild(row);
     messages.scrollTop = messages.scrollHeight;
@@ -79,7 +142,7 @@
       row.id = thinkingId;
       const div = document.createElement("div");
       div.className = "chat-bubble bot";
-      div.textContent = "Thinking...";
+      div.textContent = "Tilia is thinking…";
       row.appendChild(div);
       messages.appendChild(row);
       messages.scrollTop = messages.scrollHeight;
@@ -147,7 +210,7 @@
     });
   if (input)
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         btnSend && btnSend.click();
       }
@@ -262,6 +325,150 @@
         },
         options: { ...common, scales: { x: { ticks: { maxRotation: 0 } }, y: { beginAtZero: true } } },
       });
+    }
+
+    const rEarly = window.__REPORTS__;
+    const a =
+      d && d.analytics && d.analytics.can_view
+        ? d.analytics
+        : rEarly && rEarly.analytics && rEarly.analytics.can_view
+          ? rEarly.analytics
+          : null;
+    if (a) {
+      if (a.account_route && a.account_route.labels && a.account_route.labels.length) {
+        mountChart("chartAccountRoute", {
+          type: "doughnut",
+          data: {
+            labels: a.account_route.labels,
+            datasets: [
+              {
+                data: a.account_route.values,
+                backgroundColor: ["#7c3aed", "#e31b8d", "#64748b"],
+                borderWidth: 0,
+              },
+            ],
+          },
+          options: common,
+        });
+      }
+      if (a.request_type && a.request_type.labels && a.request_type.labels.length) {
+        mountChart("chartRequestType", {
+          type: "bar",
+          data: {
+            labels: a.request_type.labels,
+            datasets: [
+              {
+                label: "Tickets",
+                data: a.request_type.values,
+                backgroundColor: "rgba(124, 58, 237, 0.55)",
+                borderRadius: 6,
+              },
+            ],
+          },
+          options: {
+            ...common,
+            indexAxis: "y",
+            scales: { x: { beginAtZero: true }, y: { ticks: { autoSkip: false } } },
+          },
+        });
+      }
+      if (a.assigned_user && a.assigned_user.labels && a.assigned_user.labels.length) {
+        mountChart("chartAssignedUser", {
+          type: "bar",
+          data: {
+            labels: a.assigned_user.labels,
+            datasets: [
+              {
+                label: "Assigned",
+                data: a.assigned_user.values,
+                backgroundColor: "rgba(227, 27, 141, 0.55)",
+                borderRadius: 6,
+              },
+            ],
+          },
+          options: {
+            ...common,
+            indexAxis: "y",
+            scales: { x: { beginAtZero: true }, y: { ticks: { autoSkip: false } } },
+          },
+        });
+      }
+      if (a.done_by_user && a.done_by_user.labels && a.done_by_user.labels.length) {
+        mountChart("chartDoneByUser", {
+          type: "bar",
+          data: {
+            labels: a.done_by_user.labels,
+            datasets: [
+              {
+                label: "Avg hours to Done",
+                data: a.done_by_user.avg_hours,
+                backgroundColor: "rgba(56, 189, 248, 0.65)",
+                borderRadius: 6,
+              },
+            ],
+          },
+          options: { ...common, scales: { y: { beginAtZero: true } } },
+        });
+        mountChart("chartDoneCountUser", {
+          type: "bar",
+          data: {
+            labels: a.done_by_user.labels,
+            datasets: [
+              {
+                label: "Tickets Done",
+                data: a.done_by_user.done,
+                backgroundColor: "rgba(34, 197, 94, 0.65)",
+                borderRadius: 6,
+              },
+            ],
+          },
+          options: { ...common, scales: { y: { beginAtZero: true } } },
+        });
+      }
+      if (a.trend && a.trend.labels && a.trend.labels.length) {
+        mountChart("chartAnalyticsTrend", {
+          type: "line",
+          data: {
+            labels: a.trend.labels,
+            datasets: [
+              {
+                label: "Received",
+                data: a.trend.received,
+                borderColor: "#7c3aed",
+                backgroundColor: "rgba(124, 58, 237, 0.12)",
+                tension: 0.35,
+                fill: true,
+              },
+              {
+                label: "Completed",
+                data: a.trend.completed,
+                borderColor: "#22c55e",
+                backgroundColor: "rgba(34, 197, 94, 0.1)",
+                tension: 0.35,
+                fill: true,
+              },
+            ],
+          },
+          options: { ...common, scales: { x: { ticks: { maxRotation: 45 } }, y: { beginAtZero: true } } },
+        });
+      }
+      if (a.sla && a.sla.labels && a.sla.labels.length) {
+        mountChart("chartSlaSummary", {
+          type: "bar",
+          data: {
+            labels: a.sla.labels,
+            datasets: [
+              {
+                label: "Count",
+                data: a.sla.values,
+                backgroundColor: ["#f97316", "#e11d48", "#64748b"],
+                borderRadius: 6,
+              },
+            ],
+          },
+          options: { ...common, scales: { y: { beginAtZero: true } } },
+        });
+      }
     }
 
     const r = window.__REPORTS__;

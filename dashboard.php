@@ -1,12 +1,14 @@
 <?php
-
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/init.php';
 require_page('dashboard');
 
-$scope = tickets_scope_sql('t');
+$scope = tickets_active_scope_sql('t');
 $pdo = db();
+if (function_exists('ticket_apply_sla_status_batch')) {
+    ticket_apply_sla_status_batch();
+}
 
 $tot = (int) $pdo->query('SELECT COUNT(*) c FROM tickets t WHERE ' . $scope)->fetch()['c'];
 
@@ -20,12 +22,30 @@ foreach ($statusCounts as $row) {
 }
 
 $open = $map['Open'] ?? 0;
-$closed = $map['Completed'] ?? 0;
+$closedStatus = $map['Closed'] ?? 0;
+$completed = $map['Completed'] ?? 0;
 $stuck = $map['Stuck'] ?? 0;
 $canceled = $map['Cancelled'] ?? 0;
 $pending = $map['Pending Approval'] ?? 0;
 
+$awaitingAudit = 0;
+try {
+    $awaitingAudit = (int) $pdo->query(
+        'SELECT COUNT(*) c FROM tickets t JOIN ticket_statuses s ON s.id = t.status_id WHERE ' . $scope . ' AND ' . tickets_awaiting_audit_sql('t')
+    )->fetch()['c'];
+} catch (Throwable $e) {
+    $awaitingAudit = $closedStatus;
+}
+
+$roleKey = (string) current_user()['role_key'];
+$scopeLabel = match ($roleKey) {
+    'user' => 'Your tickets and assignments',
+    'hod', 'director' => 'Your department',
+    default => 'Platform-wide',
+};
+
 $late = (int) $pdo->query('SELECT COUNT(*) c FROM tickets t WHERE ' . $scope . ' AND t.is_late = 1')->fetch()['c'];
+$wf = ticket_assignment_workflow_metrics($scope);
 
 $avgRow = $pdo->query(
     'SELECT AVG(t.response_time_minutes) avg_rt, AVG(t.csat_score) avg_csat FROM tickets t WHERE ' . $scope . ' AND t.status_id = (SELECT id FROM ticket_statuses WHERE status_name = "Completed" LIMIT 1)'
@@ -90,7 +110,7 @@ if ($f) :
 <div class="container-fluid px-3 px-lg-4">
     <div class="page-title-block mb-3">
         <h1 class="mb-0">Dashboard</h1>
-        <div class="subtitle">Operational overview and ticket health</div>
+        <div class="subtitle">Operational overview — <?php echo e($scopeLabel); ?></div>
     </div>
 
     <div class="alert-strip px-3 py-2 mb-3 d-flex align-items-center justify-content-between gap-2 flex-wrap">
@@ -141,8 +161,8 @@ if ($f) :
         </div>
         <div class="col-md-6 col-xl-3">
             <div class="stat-card">
-                <div class="label">Closed Tickets</div>
-                <div class="value"><?php echo (int) $closed; ?></div>
+                <div class="label">Done / Closed (awaiting audit)</div>
+                <div class="value"><?php echo (int) $awaitingAudit; ?></div>
             </div>
         </div>
         <div class="col-md-6 col-xl-3">
@@ -158,6 +178,13 @@ if ($f) :
             </div>
         </div>
     </div>
+
+    <?php require __DIR__ . '/includes/dashboard_workflow_metrics.php'; ?>
+
+    <?php
+    $analyticsPayload = analytics_dashboard_payload();
+    require __DIR__ . '/includes/dashboard_analytics_section.php';
+    ?>
 
     <div class="row g-3">
         <div class="col-lg-4">
@@ -266,8 +293,10 @@ window.__DASHBOARD__ = {
   trendLabels: <?php echo json_encode($lineLabels); ?>,
   createdLine: <?php echo json_encode($createdLine); ?>,
   resolvedLine: <?php echo json_encode($resolvedLine); ?>,
-  pendingApproval: <?php echo (int) $pending; ?>
+  pendingApproval: <?php echo (int) $pending; ?>,
+  analytics: <?php echo json_encode($analyticsPayload, JSON_UNESCAPED_UNICODE); ?>
 };
 </script>
 
 <?php require __DIR__ . '/includes/shell_end.php'; ?>
+
